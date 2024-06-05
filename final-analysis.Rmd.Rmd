@@ -1,0 +1,1610 @@
+
+---
+title: "final-analysis"
+author: "Hewlett Xyrine Madrid"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE)
+```
+
+```{r}
+
+library(tidyverse)
+library(ggplot2)
+library(car)
+library(lme4)
+library(lmerTest)
+library(glmmTMB)
+# library(userfriendlyscience)
+library(MuMIn)
+
+```
+
+#  I. DATA
+```{r}
+
+#  imports data into R
+data <- read.csv("C:/Users/Xyrine/Documents/School Stuff/BS BIO 5th Year/BIO 200/R/final-paper/data/final-data.csv")
+head(data, 10)
+
+```
+
+##  1.a. Cleaning data
+```{r}
+
+star <- data %>%
+  select(Site, Species, RB, Abs15.R1, Abs15.R2, Abs15.R3,
+         Abs30.R1, Abs30.R2, Abs30.R3,
+         Abs60.R1, Abs60.R2, Abs60.R3,
+         Abs90.R1, Abs90.R2, Abs90.R3, Date) %>%
+  gather(Rep, NRRT, Abs15.R1, Abs15.R2, Abs15.R3,
+         Abs30.R1, Abs30.R2, Abs30.R3,
+         Abs60.R1, Abs60.R2, Abs60.R3,
+         Abs90.R1, Abs90.R2, Abs90.R3) %>%
+  separate(Rep, into = c("Time", "Replicate"), sep = "\\.") %>%    #  separates Rep into Time and Replicate
+  mutate(Time = gsub("Abs15", "15", Time),             #  renames values
+         Time = gsub("Abs30", "30", Time),
+         Time = gsub("Abs60", "60", Time),
+         Time = gsub("Abs90", "90", Time)) %>%
+  mutate(RB.sec = sapply(as.character(RB), rb.time)) %>%  #  see functions.R
+  relocate(RB.sec, .after = RB) %>%    #  moves col RB.sec from last to after RB
+  relocate(Date, .before = Site)
+
+##  replaces all empty NRRT abs values (0.000) with NA
+star$NRRT[star$NRRT == 0.000] <- NA
+
+star <- star %>% 
+  drop_na() %>%
+  mutate(Site = fct_relevel(Site, c("Pristine", "Intermediate", "Polluted"))) %>%
+  mutate(NRRT.log = log(NRRT),
+         RB.sec.log = log(RB.sec))
+
+##  conversions
+star$Time <- as.character(star$Time)
+star$Date <- as.Date(star$Date, "%m/%d/%Y")
+
+
+# testing function rb.time; ignore
+# highlight+ctrl+shift+c to try
+#
+# subset_RB <- star %>%
+#   select(RB) %>%
+#     mutate(rb.sec = sapply(as.character(subset_RB$RB), rb.time))
+
+```
+
+
+
+##  1.b. df each species across sites
+
+### 1.b.i. A. typicus 
+```{r}
+
+#  df for AT from all sites
+at <- star %>%
+  group_by(Species) %>%
+  filter(Species == "Archaster typicus") %>%
+  mutate(Site = fct_relevel(Site, c("Pristine", "Intermediate", "Polluted"))) %>%
+  print
+
+## summary
+at.sum.rb <- at %>%
+  group_by(Site) %>%
+  summarise(Mean = mean(RB.sec),
+            SD = sd(RB.sec)) %>%
+  print
+
+```
+
+### 1.b.ii. P. nodosus
+```{r}
+
+#  df for PN from all sites
+pn <- star %>%
+  group_by(Species) %>%
+  filter(Species == "Protoreaster nodosus") %>%
+  mutate(Site = fct_relevel(Site, c("Pristine", "Intermediate", "Polluted"))) %>%
+  print
+
+## summary
+pn.sum.rb <- pn %>%
+  group_by(Site) %>%
+  summarise(Mean = mean(RB.sec),
+            SD = sd(RB.sec)) %>%
+  print
+
+```
+
+### 1.b.iii. L. laevigata
+```{r}
+
+ll <- star %>%
+  group_by(Species) %>%
+  filter(Species == "Linckia laevigata") %>%
+  mutate(Site = fct_relevel(Site, c("Pristine", "Intermediate", "Polluted"))) %>%
+  print
+
+## summary
+ll.sum.rb <- ll %>%
+  group_by(Site) %>%
+  summarise(Mean = mean(RB.sec),
+            SD = sd(RB.sec)) %>%
+  print
+```
+
+
+
+
+##  1.c. df all species for each site
+
+### 1.c.i. PRISTINE
+
+```{r}
+
+s1 <- star %>%
+  group_by(Site) %>%
+  filter(Site == "Pristine") %>%
+  mutate(Species = fct_relevel(Species, c("Archaster typicus", "Protoreaster nodosus",
+                                          "Linckia laevigata"))) %>%
+  print
+
+## summary
+s1.sum.rb <- s1 %>%
+  group_by(Species) %>%
+  summarise(Mean = mean(RB.sec),
+            SD = sd(RB.sec)) %>%
+  print
+
+```
+
+### 1.c.ii. INTERMEDIATE
+```{r}
+
+s2 <- star %>%
+  group_by(Site) %>%
+  filter(Site == "Intermediate") %>%
+  mutate(Species = fct_relevel(Species, c("Archaster typicus", "Protoreaster nodosus",
+                                          "Linckia laevigata"))) %>%
+  print
+
+## summary
+s2.sum.rb <- s2 %>%
+  group_by(Species) %>%
+  summarise(Mean = mean(RB.sec),
+            SD = sd(RB.sec)) %>%
+  print
+
+```
+
+### 1.c.iii. POLLUTED
+```{r}
+
+s3 <- star %>%
+  group_by(Site) %>%
+  filter(Site == "Polluted") %>%
+  mutate(Species = fct_relevel(Species, c("Archaster typicus", "Protoreaster nodosus",
+                                          "Linckia laevigata"))) %>%
+  print
+
+## summary
+s3.sum.rb <- s3 %>%
+  group_by(Species) %>%
+  summarise(Mean = mean(RB.sec),
+            SD = sd(RB.sec)) %>%
+  print
+
+```
+
+##  1.d. df time groups
+
+### 1.d.i. A. typicus
+```{r}
+
+#  df for 15 mins AT 
+at.15 <- at %>%
+  group_by(Time) %>%
+  filter(Time == "15") %>%
+  mutate(Site = fct_relevel(Site, c("Pristine", "Intermediate", "Polluted"))) %>%
+  print
+
+
+#  df for 30 mins AT 
+at.30 <- at %>%
+  group_by(Time) %>%
+  filter(Time == "30") %>%
+  mutate(Site = fct_relevel(Site, c("Pristine", "Intermediate", "Polluted"))) %>%
+  print
+
+
+#  df for 60 mins AT 
+at.60 <- at %>%
+  group_by(Time) %>%
+  filter(Time == "60") %>%
+  mutate(Site = fct_relevel(Site, c("Pristine", "Intermediate", "Polluted"))) %>%
+  print
+
+
+#  df for 90 mins AT 
+at.90 <- at %>%
+  group_by(Time) %>%
+  filter(Time == "90") %>%
+  mutate(Site = fct_relevel(Site, c("Pristine", "Intermediate", "Polluted"))) %>%
+  print
+
+
+## summary
+at.sum <- at %>%
+  group_by(Time) %>%
+  summarise(Mean = mean(NRRT),
+            SD = sd(NRRT)) %>%
+  print
+
+
+```
+
+
+
+### 1.d.ii. P. nodosus
+```{r}
+
+#  df for 15 mins PN
+pn.15 <- pn %>%
+  group_by(Time) %>%
+  filter(Time == "15") %>%
+  mutate(Site = fct_relevel(Site, c("Pristine", "Intermediate", "Polluted"))) %>%
+  print
+
+## summary 
+
+
+#  df for 30 mins PN 
+pn.30 <- pn %>%
+  group_by(Time) %>%
+  filter(Time == "30") %>%
+  mutate(Site = fct_relevel(Site, c("Pristine", "Intermediate", "Polluted"))) %>%
+  print
+
+
+#  df for 60 mins PN 
+pn.60 <- pn %>%
+  group_by(Time) %>%
+  filter(Time == "60") %>%
+  mutate(Site = fct_relevel(Site, c("Pristine", "Intermediate", "Polluted"))) %>%
+  print
+
+
+#  df for 90 mins PN 
+pn.90 <- pn %>%
+  group_by(Time) %>%
+  filter(Time == "90") %>%
+  mutate(Site = fct_relevel(Site, c("Pristine", "Intermediate", "Polluted"))) %>%
+  print
+
+
+## summary
+pn.sum <- pn %>%
+  group_by(Time) %>%
+  summarise(Mean = mean(NRRT),
+            SD = sd(NRRT)) %>%
+  print
+
+```
+
+### 1.d.iii. L. laevigata
+```{r}
+
+#  df for 15 mins LL
+ll.15 <- ll %>%
+  group_by(Time) %>%
+  filter(Time == "15") %>%
+  mutate(Site = fct_relevel(Site, c("Pristine", "Intermediate", "Polluted"))) %>%
+  print
+
+
+#  df for 30 mins LL
+ll.30 <- ll %>%
+  group_by(Time) %>%
+  filter(Time == "30") %>%
+  mutate(Site = fct_relevel(Site, c("Pristine", "Intermediate", "Polluted"))) %>%
+  print
+
+
+#  df for 60 mins LL 
+ll.60 <- ll %>%
+  group_by(Time) %>%
+  filter(Time == "60") %>%
+  mutate(Site = fct_relevel(Site, c("Pristine", "Intermediate", "Polluted"))) %>%
+  print
+
+
+#  df for 90 mins LL 
+ll.90 <- ll %>%
+  group_by(Time) %>%
+  filter(Time == "90") %>%
+  mutate(Site = fct_relevel(Site, c("Pristine", "Intermediate", "Polluted"))) %>%
+  print
+
+
+## summary
+ll.sum <- ll %>%
+  group_by(Time) %>%
+  summarise(Mean = mean(NRRT),
+            SD = sd(NRRT)) %>%
+  print
+
+```
+
+#  II. PLOTS
+
+## 2.a. RB
+```{r}
+
+##  for palette
+cbp1 <- c("#999999", "#E69F00", "#56B4E9", "#009E73",
+          "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+##  rtc boxplot
+rb.bplot <- ggplot(star, aes(x = Site, y = RB.sec, fill = Species)) + 
+  geom_boxplot() +
+  scale_fill_manual(values = cbp1,
+                    labels = c(expression(italic("Archaster typicus")),
+                               expression(italic("Protoreaster nodosus")), 
+                               expression(italic("Linckia laevigata")))) +  # italicize species
+  scale_x_discrete(labels = c("Pristine\n(Daanbantayan)", 
+                              "Intermediate\n(Lapu-Lapu)",
+                              "Polluted\n(Aloguinsan)")) + # adds line breaks in x-axis 
+  ylab("Righting Time (seconds)") +
+  theme_bw() + # transparent bg from grey
+  theme(axis.title = element_text(size = 14, face = "bold"), # big & bold y-axis title
+        axis.title.x = element_text(margin = margin(t = 15)), # x-axis title too close to labels
+        axis.title.y = element_text(margin = margin(r = 15)), # y-axis title too close to no.
+        axis.text = element_text(size = 10, color = "black"), # axis labels black from grey
+        legend.text.align = 0, # changes legend labels to left-aligned
+        legend.text = element_text(size = 10), # changes legend labels size
+        legend.key = element_rect(fill = "white"), # prpsal pdf has a legend border for some reason
+        panel.grid.major = element_blank(), # removes major plot grid lines
+        panel.grid.minor = element_blank()) # removes minor plot grid lines
+
+rb.bplot
+
+### saves into png
+ggsave("C:/Users/Xyrine/Documents/School Stuff/BS BIO 5th Year/BIO 200/R/final-paper/f/figuerall.png",
+       width = 8, 
+       height = 5)
+
+
+```
+
+
+
+#  III. ANOVA
+
+## 3.a. RB_S1 vs. S2 vs. S3 for each species
+
+### 3.a.i. A. TYPICUS (Kruskal-Wallis Test)
+```{r}
+
+#  ASSUMPTION: homogeneity of variances
+leveneTest(RB.sec ~ Site, at)
+
+## Accept null hypothesis (p = 0.05467; p > 0.05)
+## Accept null hypothesis that the hypothesis that the differences in variances between groups 
+### are not statistically significant 
+
+## Assume homoscedasticity
+
+
+
+#  ASSUMPTION: Normality
+shapiro.test(at$RB.sec[at$Site == "Pristine"]) ## (p = 3.459e-12; p < 0.05)
+## Reject null hypothesis that data is not different from normal distribution of data
+## Data not normally distributed
+
+shapiro.test(at$RB.sec[at$Site == "Intermediate"]) ## (p = 1.666e-12; p < 0.05)
+## Reject null hypothesis that data is not different from normal distribution of data
+## Data not normally distributed
+
+shapiro.test(at$RB.sec[at$Site == "Polluted"]) ## (p = 3.583e-08; p < 0.05)
+## Reject null hypothesis that data is not different from normal distribution of data
+## Data not normally distributed
+
+
+
+#  KRUSKAL-WALLIS TEST (for not normally distributed)
+at.kw <- kruskal.test(RB.sec ~ Site, at)
+at.kw # (p = 9.777e-05; p < 0.05)
+
+## Reject Ho; there is a significant difference in RB between sites for AT
+
+#  WELCH'S ANOVA TEST
+at.wl <- oneway.test(RB.sec ~ Site, at, var.equal = FALSE)
+at.wl # (p = 0.001939; p < 0.05)
+
+## Reject Ho; there is a significant difference in RB between sites for AT
+
+```
+
+
+
+### 3.a.ii. P. NODOSUS (Kruskal-Wallis Test)
+
+```{r}
+
+#  ASSUMPTION: homogeneity of variances
+leveneTest(RB.sec ~ Site, pn)
+
+## Reject null hypothesis (p = 2.2e-16; p < 0.05)
+## Reject the hypothesis that the differences in variances between groups 
+### are not statistically significant 
+
+## Assume heteroscedasticity
+
+
+
+#  ASSUMPTION: Normality
+shapiro.test(pn$RB.sec[pn$Site == "Pristine"]) ## (p = 1.909e-06; p < 0.05)
+## Reject null hypothesis that data is not different from normal distribution of data
+## Data not normally distributed
+
+shapiro.test(pn$RB.sec[pn$Site == "Intermediate"]) ## (p = 2.2e-16; p < 0.05)
+## Reject null hypothesis that data is not different from normal distribution of data
+## Data not normally distributed
+
+shapiro.test(pn$RB.sec[pn$Site == "Polluted"]) ## (p = 2.111e-12; p < 0.05)
+## Reject null hypothesis that data is not different from normal distribution of data
+## Data not normally distributed
+
+
+
+#  KRUSKAL-WALLIS TEST
+pn.kw <- kruskal.test(RB.sec ~ Site, pn)
+pn.kw # (p = 2.2e-16; p < 0.05)
+
+## Reject Ho; there is a significant difference in RB between sites for PN
+
+#  WELCH'S ANOVA TEST
+pn.wl <- oneway.test(RB.sec ~ Site, pn, var.equal = FALSE)
+pn.wl # (p = < 2.2e-16; p < 0.05)
+
+## Reject Ho; there is a significant difference in RB between sites for PN
+
+```
+
+### 3.a.ii. L. LAEVIGATA (Kruskal-Wallis Test)
+
+```{r}
+
+#  ASSUMPTION: homogeneity of variances
+leveneTest(RB.sec ~ Site, ll)
+
+## Accept null hypothesis (p = 0.1545; p > 0.05)
+## Accept the hypothesis that the differences in variances between groups 
+### are not statistically significant 
+
+## Assume homoscedasticity
+
+
+
+#  ASSUMPTION: Normality
+shapiro.test(ll$RB.sec[ll$Site == "Pristine"]) ## (p = 2.2e-16; p < 0.05)
+## Reject null hypothesis that data is not different from normal distribution of data
+## Data not normally distributed
+
+shapiro.test(ll$RB.sec[ll$Site == "Intermediate"]) ## (p = 3.452e-10; p < 0.05)
+## Reject null hypothesis that data is not different from normal distribution of data
+## Data not normally distributed
+
+shapiro.test(ll$RB.sec[ll$Site == "Polluted"]) ## (p = 1.117e-11; p < 0.05)
+## Reject null hypothesis that data is not different from normal distribution of data
+## Data not normally distributed
+
+
+
+#  KRUSKAL-WALLIS TEST
+ll.kw <- kruskal.test(RB.sec ~ Site, ll)
+ll.kw # (p = 2.2e-16; p < 0.05)
+
+## Reject Ho; there is a significant difference in RB between sites for LL
+
+#  WELCH'S ANOVA TEST
+ll.wl <- oneway.test(RB.sec ~ Site, ll, var.equal = FALSE)
+ll.wl # (p = < 2.2e-16; p < 0.05)
+
+## Reject Ho; there is a significant difference in RB between sites for LL
+
+
+
+```
+
+## 3.b. RB_AT vs. PN vs. LL for each site
+
+### 3.b.i. PRISTINE
+```{r}
+
+#  ASSUMPTION: homogeneity of variances
+leveneTest(RB.sec ~ Species, s1)
+
+## Reject null hypothesis (p = < 2.2e-16; p < 0.05)
+## Reject the hypothesis that the differences in variances between groups 
+### are statistically significant 
+
+## Assume heteroscedasticity
+
+
+
+#  ASSUMPTION: Normality
+shapiro.test(s1$RB.sec[s1$Species == "Archaster typicus"]) ## (p = 3.459e-12; p < 0.05)
+## Reject null hypothesis that data is not different from normal distribution of data
+## Data not normally distributed
+
+shapiro.test(s1$RB.sec[s1$Species == "Protoreaster nodosus"]) ## (p = 1.909e-06; p < 0.05)
+## Reject null hypothesis that data is not different from normal distribution of data
+## Data not normally distributed
+
+shapiro.test(s1$RB.sec[s1$Species == "Linckia laevigata"]) ## (p = < 2.2e-16; p < 0.05)
+## Reject null hypothesis that data is not different from normal distribution of data
+## Data not normally distributed
+
+
+
+#  KRUSKAL-WALLIS TEST
+s1.kw <- kruskal.test(RB.sec ~ Species, s1)
+s1.kw# (p = < 2.2e-16; p < 0.05)
+
+## Reject Ho; there is a significant difference in RB between species in Pristine Site
+
+#  WELCH'S ANOVA TEST
+s1.wl <- oneway.test(RB.sec ~ Species, s1, var.equal = FALSE)
+s1.wl # (p = < 2.2e-16; p < 0.05)
+
+## Reject Ho; there is a significant difference in RB between species in Pristine Site
+
+```
+
+### 3.b.ii. INTERMEDIATE
+```{r}
+
+#  ASSUMPTION: homogeneity of variances
+leveneTest(RB.sec ~ Species, s2)
+
+## Reject null hypothesis (p = < 2.2e-16; p < 0.05)
+## Reject the hypothesis that the differences in variances between groups 
+### are statistically significant 
+
+## Assume heteroscedasticity
+
+
+
+#  ASSUMPTION: Normality
+shapiro.test(s2$RB.sec[s2$Species == "Archaster typicus"]) ## (p = 1.666e-12; p < 0.05)
+## Reject null hypothesis that data is not different from normal distribution of data
+## Data not normally distributed
+
+shapiro.test(s2$RB.sec[s2$Species == "Protoreaster nodosus"]) ## (p = < 2.2e-16; p < 0.05)
+## Reject null hypothesis that data is not different from normal distribution of data
+## Data not normally distributed
+
+shapiro.test(s2$RB.sec[s2$Species == "Linckia laevigata"]) ## (p = 3.452e-10; p < 0.05)
+## Reject null hypothesis that data is not different from normal distribution of data
+## Data not normally distributed
+
+
+
+#  KRUSKAL-WALLIS TEST
+s2.kw <- kruskal.test(RB.sec ~ Species, s2)
+s2.kw# (p = < 2.2e-16; p < 0.05)
+
+## Reject Ho; there is a significant difference in RB between species in Intermediate Site
+
+#  WELCH'S ANOVA TEST
+s2.wl <- oneway.test(RB.sec ~ Species, s2, var.equal = FALSE)
+s2.wl # (p = < 2.2e-16; p < 0.05)
+
+## Reject Ho; there is a significant difference in RB between species in Intermediate Site
+
+```
+
+### 3.b.iii. POLLUTED
+```{r}
+
+#  ASSUMPTION: homogeneity of variances
+leveneTest(RB.sec ~ Species, s3)
+
+## Reject null hypothesis (p = < 2.2e-16; p < 0.05)
+## Reject the hypothesis that the differences in variances between groups 
+### are statistically significant 
+
+## Assume heteroscedasticity
+
+
+
+#  ASSUMPTION: Normality
+shapiro.test(s3$RB.sec[s3$Species == "Archaster typicus"]) ## (p = 3.583e-08; p < 0.05)
+## Reject null hypothesis that data is not different from normal distribution of data
+## Data not normally distributed
+
+shapiro.test(s3$RB.sec[s3$Species == "Protoreaster nodosus"]) ## (p = 2.111e-12; p < 0.05)
+## Reject null hypothesis that data is not different from normal distribution of data
+## Data not normally distributed
+
+shapiro.test(s3$RB.sec[s3$Species == "Linckia laevigata"]) ## (p = 1.117e-11; p < 0.05)
+## Reject null hypothesis that data is not different from normal distribution of data
+## Data not normally distributed
+
+
+
+#  KRUSKAL-WALLIS TEST
+s3.kw <- kruskal.test(RB.sec ~ Species, s3)
+s3.kw  # (p = < 2.2e-16; p < 0.05)
+
+## Reject Ho; there is a significant difference in RB between species in Polluted Site
+
+#  WELCH'S ANOVA TEST
+s3.wl <- oneway.test(RB.sec ~ Species, s3, var.equal = FALSE)
+s3.wl # (p = < 2.2e-16; p < 0.05)
+
+## Reject Ho; there is a significant difference in RB between species in Polluted Site
+
+```
+
+##  3.c. NRRT_time group comparison
+
+### 3.c.i. A. typicus 
+
+#### A. 15 mins
+```{r}
+#  ASSUMPTION: homogeneity of variances
+leveneTest(NRRT ~ Site, at.15)
+
+## Reject null hypothesis (p = 0.432; p > 0.05)
+## Accept the hypothesis that the differences in variances between groups 
+### are statistically significant 
+
+## Assume heteroscedasticity
+
+
+#  ASSUMPTION: Normality
+shapiro.test(at.15$NRRT[at.15$Site == "Pristine"]) ## (p = 0.3631; p > 0.05)
+## Accept null hypothesis that population is normally distributed
+## Assume normal distribution of data
+
+shapiro.test(at.15$NRRT[at.15$Site == "Intermediate"]) ## (p = 0.008129; p < 0.05)
+## Reject null hypothesis that population is normally distributed
+## Assume not normal distribution of data
+
+
+#  KRUSKAL-WALLIS TEST
+at.15.kw <- kruskal.test(NRRT ~ Site, at.15)
+at.15.kw # (p = 0.3489; p > 0.05)
+
+## Accept Ho
+
+
+
+```
+
+#### B. 30 mins 
+```{r}
+#  ASSUMPTION: homogeneity of variances
+leveneTest(NRRT ~ Site, at.30)
+
+## Reject null hypothesis (p = 0.2352; p > 0.05)
+## Accept the hypothesis that the differences in variances between groups 
+### are statistically significant 
+
+## Assume homoscedasticity
+
+
+#  ASSUMPTION: Normality
+shapiro.test(at.30$NRRT[at.30$Site == "Pristine"]) ## (p = 0.03638; p < 0.05)
+## Reject null hypothesis that data does not differ from normal distribution signif.
+## Assume not normal distribution of data
+
+shapiro.test(at.30$NRRT[at.30$Site == "Intermediate"]) ## (p = 2.772e-13; p < 0.05)
+## Reject null hypothesis that data does not differ from normal distribution signif.
+## Assume not normal distribution of data
+
+shapiro.test(at.30$NRRT[at.30$Site == "Polluted"]) ## (p = 0.01424; p < 0.05)
+## Reject null hypothesis that data does not differ from normal distribution signif.
+## Assume not normal distribution of data
+
+
+#  KRUSKAL-WALLIS TEST
+at.30.kw <- kruskal.test(NRRT ~ Site, at.30)
+at.30.kw # (p = 4.021e-08; p < 0.05)
+
+## Reject Ho
+
+at.30.av <- aov(NRRT ~ Site, at.30)
+summary(at.30.av)
+
+
+```
+
+#### C. 60 mins 
+```{r}
+#  ASSUMPTION: homogeneity of variances
+leveneTest(NRRT ~ Site, at.60)
+
+## Reject null hypothesis (p = 0.9453; p > 0.05)
+## Accept the hypothesis that the differences in variances between groups 
+### are statistically significant 
+
+## Assume homoscedasticity
+
+
+#  ASSUMPTION: Normality
+shapiro.test(at.60$NRRT[at.60$Site == "Pristine"]) ## (p = 1.335e-12; p < 0.05)
+## Reject null hypothesis that data does not differ from normal distribution signif.
+## Assume not normal distribution of data
+
+shapiro.test(at.60$NRRT[at.60$Site == "Intermediate"]) ## (p = 2.517e-15; p < 0.05)
+## Reject null hypothesis that data does not differ from normal distribution signif.
+## Assume not normal distribution of data
+
+shapiro.test(at.60$NRRT[at.60$Site == "Polluted"]) ## (p = 7.623e-11; p < 0.05)
+## Reject null hypothesis that data does not differ from normal distribution signif.
+## Assume not normal distribution of data
+
+
+#  KRUSKAL-WALLIS TEST
+at.60.kw <- kruskal.test(NRRT ~ Site, at.60)
+at.60.kw # (p = 0.2763; p > 0.05)
+
+##  Accept Ho
+
+
+at.60.av <- aov(NRRT ~ Site, at.60)
+summary(at.60.av)
+
+
+```
+
+#### D. 90 mins 
+```{r}
+#  ASSUMPTION: homogeneity of variances
+leveneTest(NRRT ~ Site, at.90)
+
+## Reject null hypothesis (p = 0.05489; p > 0.05)
+## Accept the hypothesis that the differences in variances between groups 
+### are statistically significant 
+
+## Assume homoscedasticity
+
+
+#  ASSUMPTION: Normality
+shapiro.test(at.90$NRRT[at.90$Site == "Pristine"]) ## (p = 4.08e-11; p < 0.05)
+## Reject null hypothesis that data does not differ from normal distribution signif.
+## Assume not normal distribution of data
+
+shapiro.test(at.90$NRRT[at.90$Site == "Intermediate"]) ## (p = 1.141e-06; p < 0.05)
+## Reject null hypothesis that data does not differ from normal distribution signif.
+## Assume not normal distribution of data
+
+shapiro.test(at.90$NRRT[at.90$Site == "Polluted"]) ## (p = 7.207e-14; p < 0.05)
+## Reject null hypothesis that data does not differ from normal distribution signif.
+## Assume not normal distribution of data
+
+
+#  KRUSKAL-WALLIS TEST
+at.90.kw <- kruskal.test(NRRT ~ Site, at.90)
+at.90.kw # (p = 4.259e-13; p < 0.05)
+
+## Reject Ho
+
+```
+
+### 3.c.ii. P. nodosus
+
+#### A. 15 mins
+```{r}
+#  ASSUMPTION: homogeneity of variances
+leveneTest(NRRT ~ Site, pn.15)
+
+## Reject null hypothesis (p = 0.1441; p > 0.05)
+## Accept the hypothesis that the differences in variances between groups 
+### are statistically significant 
+
+## Assume homoscedasticity
+
+
+#  ASSUMPTION: Normality
+shapiro.test(pn.15$NRRT[pn.15$Site == "Pristine"]) ## (p = 1.619e-05; p < 0.05)
+## Reject null hypothesis that data does not differ from normal distribution signif.
+## Assume not normal distribution of data
+
+shapiro.test(pn.15$NRRT[pn.15$Site == "Intermediate"]) ## (p = 0.008328; p < 0.05)
+## Reject null hypothesis that data does not differ from normal distribution signif.
+## Assume not normal distribution of data
+
+shapiro.test(pn.15$NRRT[pn.15$Site == "Polluted"]) ## (p = 2.448e-12; p < 0.05)
+## Reject null hypothesis that data does not differ from normal distribution signif.
+## Assume not normal distribution of data
+
+
+#  KRUSKAL-WALLIS TEST
+pn.15.kw <- kruskal.test(NRRT ~ Site, pn.15)
+pn.15.kw # (p = 2.32e-13; p < 0.05)
+
+## Reject Ho
+
+```
+
+#### B. 30 mins
+```{r}
+#  ASSUMPTION: homogeneity of variances
+leveneTest(NRRT ~ Site, pn.30)
+
+## Reject null hypothesis (p = 0.1371; p > 0.05)
+## Accept the hypothesis that the differences in variances between groups 
+### are statistically significant 
+
+## Assume homoscedasticity
+
+
+#  ASSUMPTION: Normality
+shapiro.test(pn.30$NRRT[pn.30$Site == "Pristine"]) ## (p = 4.401e-11; p < 0.05)
+## Reject null hypothesis that data does not differ from normal distribution signif.
+## Assume not normal distribution of data
+
+shapiro.test(pn.30$NRRT[pn.30$Site == "Intermediate"]) ## (p = 4.663e-12; p < 0.05)
+## Reject null hypothesis that data does not differ from normal distribution signif.
+## Assume not normal distribution of data
+
+shapiro.test(pn.30$NRRT[pn.30$Site == "Polluted"]) ## (p = 1.884e-08; p < 0.05)
+## Reject null hypothesis that data does not differ from normal distribution signif.
+## Assume not normal distribution of data
+
+
+#  KRUSKAL-WALLIS TEST
+pn.30.kw <- kruskal.test(NRRT ~ Site, pn.30)
+pn.30.kw # (p = 0.2078; p > 0.05)
+
+## Accept Ho
+
+```
+
+#### C. 60 mins
+```{r}
+#  ASSUMPTION: homogeneity of variances
+leveneTest(NRRT ~ Site, pn.60)
+
+## Reject null hypothesis (p = 0.116; p > 0.05)
+## Accept the hypothesis that the differences in variances between groups 
+### are statistically significant 
+
+## Assume homoscedasticity
+
+
+#  ASSUMPTION: Normality
+shapiro.test(pn.60$NRRT[pn.60$Site == "Pristine"]) ## (p = 6.853e-09; p < 0.05)
+## Reject null hypothesis that data does not differ from normal distribution signif.
+## Assume not normal distribution of data
+
+shapiro.test(pn.60$NRRT[pn.60$Site == "Intermediate"]) ## (p = 3.044e-07; p < 0.05)
+## Reject null hypothesis that data does not differ from normal distribution signif.
+## Assume not normal distribution of data
+
+shapiro.test(pn.60$NRRT[pn.60$Site == "Polluted"]) ## (p = 1.52e-09; p < 0.05)
+## Reject null hypothesis that data does not differ from normal distribution signif.
+## Assume not normal distribution of data
+
+
+#  KRUSKAL-WALLIS TEST
+pn.60.kw <- kruskal.test(NRRT ~ Site, pn.60)
+pn.60.kw # (p = 0.2266; p > 0.05)
+
+## Accept Ho
+
+```
+
+#### C. 90 mins
+```{r}
+#  ASSUMPTION: homogeneity of variances
+leveneTest(NRRT ~ Site, pn.90)
+
+## Reject null hypothesis (p = 7.038e-10; p < 0.05)
+## Accept the hypothesis that the differences in variances between groups 
+### are statistically significant 
+
+## Assume heteroscedasticity
+
+
+#  ASSUMPTION: Normality
+shapiro.test(pn.90$NRRT[pn.90$Site == "Pristine"]) ## (p = 5.991e-09; p < 0.05)
+## Reject null hypothesis that data does not differ from normal distribution signif.
+## Assume not normal distribution of data
+
+shapiro.test(pn.90$NRRT[pn.90$Site == "Intermediate"]) ## (p = 2.785e-07; p < 0.05)
+## Reject null hypothesis that data does not differ from normal distribution signif.
+## Assume not normal distribution of data
+
+shapiro.test(pn.90$NRRT[pn.90$Site == "Polluted"]) ## (p = 4.713e-09; p < 0.05)
+## Reject null hypothesis that data does not differ from normal distribution signif.
+## Assume not normal distribution of data
+
+
+#  KRUSKAL-WALLIS TEST
+pn.90.kw <- kruskal.test(NRRT ~ Site, pn.90)
+pn.90.kw # (p = 0.005866; p < 0.05)
+
+## Reject Ho
+
+```
+
+### 3.c.iii. L. laevigata
+
+#### A. 15 mins
+```{r}
+#  ASSUMPTION: homogeneity of variances
+leveneTest(NRRT ~ Site, ll.15)
+
+## Reject null hypothesis (p = 0.0002862; p < 0.05)
+## Reject the hypothesis that the differences in variances between groups 
+### are statistically significant 
+
+## Assume homoscedasticity
+
+
+#  ASSUMPTION: Normality
+shapiro.test(ll.15$NRRT[ll.15$Site == "Pristine"]) ## (p = 1.999e-08; p < 0.05)
+## Reject null hypothesis that data does not differ from normal distribution signif.
+## Assume not normal distribution of data
+
+shapiro.test(ll.15$NRRT[ll.15$Site == "Intermediate"]) ## (p = 0.03456; p < 0.05)
+## Reject null hypothesis that data does not differ from normal distribution signif.
+## Assume not normal distribution of data
+
+shapiro.test(ll.15$NRRT[ll.15$Site == "Polluted"]) ## (p = 2.244e-10; p < 0.05)
+## Reject null hypothesis that data does not differ from normal distribution signif.
+## Assume not normal distribution of data
+
+
+#  KRUSKAL-WALLIS TEST
+ll.15.kw <- kruskal.test(NRRT ~ Site, ll.15)
+ll.15.kw # (p = 2.775e-09; p < 0.05)
+
+## Reject Ho
+
+
+
+```
+
+#### B. 30 mins
+```{r}
+#  ASSUMPTION: homogeneity of variances
+leveneTest(NRRT ~ Site, ll.30)
+
+## Reject null hypothesis (p = 0.3874; p > 0.05)
+## Accept the hypothesis that the differences in variances between groups 
+### are statistically significant 
+
+## Assume homoscedasticity
+
+
+#  ASSUMPTION: Normality
+shapiro.test(ll.30$NRRT[ll.30$Site == "Pristine"]) ## (p = 1.169e-08; p < 0.05)
+## Reject null hypothesis that data does not differ from normal distribution signif.
+## Assume not normal distribution of data
+
+shapiro.test(ll.30$NRRT[ll.30$Site == "Intermediate"]) ## (p = 5.73e-07; p < 0.05)
+## Reject null hypothesis that data does not differ from normal distribution signif.
+## Assume not normal distribution of data
+
+shapiro.test(ll.30$NRRT[ll.30$Site == "Polluted"]) ## (p = 2.2e-16; p < 0.05)
+## Reject null hypothesis that data does not differ from normal distribution signif.
+## Assume not normal distribution of data
+
+
+#  KRUSKAL-WALLIS TEST
+ll.30.kw <- kruskal.test(NRRT ~ Site, ll.30)
+ll.30.kw # (p = 0.01798; p < 0.05)
+
+## Reject Ho
+
+```
+
+#### C. 60 mins
+```{r}
+#  ASSUMPTION: homogeneity of variances
+leveneTest(NRRT ~ Site, ll.60)
+
+## Reject null hypothesis (p = 0.1677; p > 0.05)
+## Accept the hypothesis that the differences in variances between groups 
+### are statistically significant 
+
+## Assume homoscedasticity
+
+
+#  ASSUMPTION: Normality
+shapiro.test(ll.60$NRRT[ll.60$Site == "Pristine"]) ## (p = 3.287e-09; p < 0.05)
+## Reject null hypothesis that data does not differ from normal distribution signif.
+## Assume not normal distribution of data
+
+shapiro.test(ll.60$NRRT[ll.60$Site == "Intermediate"]) ## (p = 3.68e-14; p < 0.05)
+## Reject null hypothesis that data does not differ from normal distribution signif.
+## Assume not normal distribution of data
+
+shapiro.test(ll.60$NRRT[ll.60$Site == "Polluted"]) ## (p = 1.52e-09; p < 0.05)
+## Reject null hypothesis that data does not differ from normal distribution signif.
+## Assume not normal distribution of data
+
+
+#  KRUSKAL-WALLIS TEST
+ll.60.kw <- kruskal.test(NRRT ~ Site, ll.60)
+ll.60.kw # (p = 0.2266; p > 0.05)
+
+## Accept Ho
+
+```
+
+#### D. 90 mins
+```{r}
+#  ASSUMPTION: homogeneity of variances
+leveneTest(NRRT ~ Site, ll.90)
+
+## Reject null hypothesis (p = 0.001729; p < 0.05)
+## Accept the hypothesis that the differences in variances between groups 
+### are statistically significant 
+
+## Assume heteroscedasticity
+
+
+#  ASSUMPTION: Normality
+shapiro.test(ll.90$NRRT[ll.90$Site == "Pristine"]) ## (p = 1.922e-08; p < 0.05)
+## Reject null hypothesis that data does not differ from normal distribution signif.
+## Assume not normal distribution of data
+
+shapiro.test(ll.90$NRRT[ll.90$Site == "Intermediate"]) ## (p = 2.329e-07; p < 0.05)
+## Reject null hypothesis that data does not differ from normal distribution signif.
+## Assume not normal distribution of data
+
+shapiro.test(ll.90$NRRT[ll.90$Site == "Polluted"]) ## (p = 2.402e-05; p < 0.05)
+## Reject null hypothesis that data does not differ from normal distribution signif.
+## Assume not normal distribution of data
+
+
+#  KRUSKAL-WALLIS TEST
+ll.90.kw <- kruskal.test(NRRT ~ Site, ll.90)
+ll.90.kw # (p = 0.0001623; p > 0.05)
+
+## Accept Ho
+
+```
+
+#  IV. POST-HOC
+## 4a. Games-Howell
+```{r}
+# #  please see functions.R
+# 
+# #  s1 vs. s2 vs. s3 for each species
+# ##  A. typicus
+# gh.at <- posthocTGH(y = at$RB.sec, x = at$Site, method = "games-howell")
+# plotGamesHowell(gh.at)
+# 
+# 
+# ## saves png
+# png(filename = "C:/Users/Xyrine/Documents/School Stuff/BS BIO 5th Year/BIO 200/R/final/figures/final/plot_gh_at.png")
+# plotGamesHowell(gh.at)
+# dev.off()
+# 
+# 
+# ##  P. nodosus
+# gh.pn <- posthocTGH(y = pn$RB.sec, x = pn$Site, method = "games-howell")
+# plotGamesHowell(gh.pn)
+# 
+# ## saves png
+# png(filename = "C:/Users/Xyrine/Documents/School Stuff/BS BIO 5th Year/BIO 200/R/final/figures/final/plot_gh_pn.png")
+# plotGamesHowell(gh.pn)
+# dev.off()
+# 
+# 
+# ##  L. laevigata
+# gh.ll <- posthocTGH(y = ll$RB.sec, x = ll$Site, method = "games-howell")
+# plotGamesHowell(gh.ll)
+# 
+# ## saves png
+# png(filename = "C:/Users/Xyrine/Documents/School Stuff/BS BIO 5th Year/BIO 200/R/final-paper/figures/final/plot_gh_ll.png")
+# plotGamesHowell(gh.ll)
+# dev.off()
+# 
+# 
+# 
+# #  AT vs. PN vs. LL in each site 
+# ##  S1
+# gh.s1 <- posthocTGH(y = s1$RB.sec, x = s1$Species, method = "games-howell")
+# plotGamesHowell(gh.s1)
+# 
+# ## saves png
+# png(filename = "C:/Users/Xyrine/Documents/School Stuff/BS BIO 5th Year/BIO 200/R/final-paper/figures/final/plot_gh_s1.png",
+#     width = 980)
+# plotGamesHowell(gh.s1)
+# dev.off()
+# 
+# 
+# ##  S2
+# gh.s2 <- posthocTGH(y = s2$RB.sec, x = s2$Species, method = "games-howell")
+# plotGamesHowell(gh.s2)
+# 
+# ## saves png
+# png(filename = "C:/Users/Xyrine/Documents/School Stuff/BS BIO 5th Year/BIO 200/R/final-paper/figures/final/plot_gh_s2.png",
+#     width = 980)
+# plotGamesHowell(gh.s2)
+# dev.off()
+# 
+# 
+# ##  S3
+# gh.s3 <- posthocTGH(y = s3$RB.sec, x = s3$Species, method = "games-howell")
+# plotGamesHowell(gh.s3)
+# 
+# ## saves png
+# png(filename = "C:/Users/Xyrine/Documents/School Stuff/BS BIO 5th Year/BIO 200/R/final-paper/figures/final/plot_gh_s3.png",
+#     width = 980)
+# plotGamesHowell(gh.s3)
+# dev.off()
+
+
+```
+
+#  V. LINEAR REGRESSION 
+
+## 5.a. Overall
+```{r}
+
+#  plot
+lmplot.all <- ggplot(star, aes(x = NRRT.log, y = RB.sec.log, col = Site)) + 
+  geom_point(shape = 20, size = 2) +
+  geom_smooth(method = lm, se = FALSE, fullrange= TRUE, color = "black") +
+    scale_color_manual(values = c("Pristine" = "#00AFBB", 
+                                  "Intermediate" = "#E7B800",
+                                  "Polluted" = "#FC4E07"), 
+                       labels = element_text(size = 10)) +
+  geom_smooth(method = lm, se = FALSE, fullrange= TRUE, color = "black") + 
+  ylab("Log (Righting Time, seconds)") +
+  xlab("Log (Neutral Red Retention Test Absorbance)") +
+  theme_classic() + # scatter plot axes theme? removes plot border
+  theme(axis.line.x = element_line(linewidth = 0.75), # x-axis thickness
+        axis.line.y = element_line(linewidth = 0.75)) + # y-axis thickness
+  theme(axis.title = element_text(size = 12, face = "bold"), # big & bold y-axis title
+        axis.title.x = element_text(margin = margin(t = 18)), # x-axis title too close to labels
+        axis.title.y = element_text(margin = margin(r = 18)), # y-axis title too close to nos.
+        axis.text = element_text(size = 12, color = "black"), # axis labels black from grey
+        panel.grid.major = element_blank(), # removes major plot grid lines
+        panel.grid.minor = element_blank(), # removes minor plot grid lines
+        plot.margin = unit(c(1, 0.5, 0.5, 0.5), "cm"), # title cut off; adjusts margin
+        plot.title = element_text(size = 28, face = "bold", vjust = 5)) # title position
+lmplot.all
+
+## saves png
+ggsave("C:/Users/Xyrine/Documents/School Stuff/BS BIO 5th Year/BIO 200/R/final-paper/figures/final/lmplot_all.png",
+       width = 10, 
+       height = 5)
+
+#  LINEAR MIXED MODEL
+mm.all <- lmer(RB.sec ~ NRRT + (1|Date) + (1|Replicate) + (1|Species) +
+                 (1|Site) + (1|Time), data = star)
+
+mm.all.log <- lmer(RB.sec.log ~ NRRT.log + (1|Date) + (1|Replicate) + (1|Species) +
+                 (1|Site) + (1|Time), data = star)
+
+summary(mm.all)
+summary(mm.all.log)
+
+## R-squared for mixed effect model
+r.squaredGLMM(mm.all)
+r.squaredGLMM(mm.all.log)
+
+#  LINEAR REGRESSION
+summary(lm(RB.sec ~ NRRT, star))
+
+# residual and q-q plots
+
+
+
+```
+
+
+## 5.b.i. A. typicus
+```{r}
+
+# linear regression 
+lm.at <- lm(RB.sec.log ~ NRRT.log, at)
+summary(lm.at)
+
+#  linear mixed effects
+mm.at <- lmer(RB.sec ~ NRRT + (1|Date) + (1|Replicate) + (1|Site) + (1|Time), data = at)
+mm.at.log <- lmer(RB.sec.log ~ NRRT.log + (1|Date) + (1|Replicate) + (1|Site) + (1|Time), data = at)
+
+summary(mm.at)
+anova(mm.at)
+summary(mm.at.log)
+
+## R-squared for mixed effect model
+r.squaredGLMM(mm.at)
+r.squaredGLMM(mm.at.log)
+
+
+#  scatter plot
+lmplot.at <- ggplot(at, aes(x = NRRT, y = RB.sec, col = Site)) + 
+  geom_point(shape = 20, size = 2) +
+    scale_color_manual(values = c("Pristine" = "#00AFBB", 
+                                  "Intermediate" = "#E7B800",
+                                  "Polluted" = "#FC4E07"), 
+                       labels = element_text(size = 10)) +
+  geom_smooth(method = lm, se = FALSE, fullrange= TRUE, color = "black") + 
+  ylab("Righting Time (seconds)") +
+  xlab("Neutral Red Retention Test Absorbance") +
+  ggtitle("A") +  # transparent bg
+  theme_classic() + # scatter plot axes theme? removes plot border
+  theme(axis.line.x = element_line(linewidth = 0.75), # x-axis thickness
+        axis.line.y = element_line(linewidth = 0.75)) + # y-axis thickness
+  theme(axis.title = element_text(size = 12, face = "bold"), # big & bold y-axis title
+        axis.title.x = element_text(margin = margin(t = 18)), # x-axis title too close to labels
+        axis.title.y = element_text(margin = margin(r = 18)), # y-axis title too close to nos.
+        axis.text = element_text(size = 12, color = "black"), # axis labels black from grey
+        panel.grid.major = element_blank(), # removes major plot grid lines
+        panel.grid.minor = element_blank(), # removes minor plot grid lines
+        plot.margin = unit(c(1, 0.5, 0.5, 0.5), "cm"), # title cut off; adjusts margin
+        plot.title = element_text(size = 28, face = "bold", vjust = 5)) # title position
+lmplot.at
+
+ggsave("C:/Users/Xyrine/Documents/School Stuff/BS BIO 5th Year/BIO 200/R/final-paper/figures/final/lmplot_at.png",
+       width = 8, 
+       height = 5)
+
+
+```
+
+### 5.b.ii log_A. typicus
+```{r}
+
+
+#  scatter plot_log transformed
+lmplot.at.log <- ggplot(at, aes(x = NRRT.log, y = RB.sec.log, col = Site)) + 
+  geom_point(shape = 20, size = 2) +
+    scale_color_manual(values = c("Pristine" = "#00AFBB", 
+                                  "Intermediate" = "#E7B800",
+                                  "Polluted" = "#FC4E07"), 
+                       labels = element_text(size = 10)) +
+  geom_smooth(method = lm, se = FALSE, fullrange= TRUE, color = "black",
+              linewidth = 0.9) + 
+  ylab("Log (AT Righting Time, seconds)") +
+  xlab("Log (Neutral Red Retention Test Absorbance)") +
+  ggtitle("A") +  
+  theme_classic() +
+  theme(axis.line.x = element_line(linewidth = 0.75), # x-axis thickness
+        axis.line.y = element_line(linewidth = 0.75)) + # y-axis thickness
+  theme(axis.title = element_text(size = 14, face = "bold"), # big & bold y-axis title
+        axis.title.x = element_text(margin = margin(t = 18)), # x-axis title too close to labels
+        axis.title.y = element_text(margin = margin(r = 18)), # y-axis title too close to nos.
+        axis.text = element_text(size = 12, color = "black"), # axis labels black from grey
+        panel.grid.major = element_blank(), # removes major plot grid lines
+        panel.grid.minor = element_blank(), # removes minor plot grid lines
+        plot.margin = unit(c(1, 0.5, 0.5, 0.5), "cm"), # title cut off; adjusts margin
+        plot.title = element_text(size = 28, face = "bold", vjust = 5)) # title position
+lmplot.at.log
+
+ggsave("C:/Users/Xyrine/Documents/School Stuff/BS BIO 5th Year/BIO 200/R/final-paper/figures/final/log_lmplot_at.png",
+       width = 10, 
+       height = 5)
+
+```
+
+
+## 5.c. P. nodosus
+```{r}
+
+# linear regression 
+lm.pn <- lm(RB.sec ~ NRRT, pn)
+summary(lm.pn)
+
+# linear mixed effects
+mm.pn <- lmer(RB.sec ~ NRRT + (1|Date) + (1|Replicate) + (1|Site) + (1|Time), data = pn)
+mm.pn.log <- lmer(RB.sec.log ~ NRRT.log + (1|Date) + (1|Replicate) + (1|Site) + (1|Time), data = pn)
+
+summary(mm.pn)
+summary(mm.pn.log)
+
+## correlation coefficient
+r.squaredGLMM(mm.pn)
+r.squaredGLMM(mm.pn.log)
+
+
+#  scatter plot
+lmplot.pn <- ggplot(pn, aes(x = NRRT, y = RB.sec, col = Site)) + 
+  geom_point(shape = 20, size = 2) +
+    scale_color_manual(values = c("Pristine" = "#00AFBB", 
+                                  "Intermediate" = "#E7B800",
+                                  "Polluted" = "#FC4E07"), 
+                       labels = element_text(size = 10)) +
+  geom_smooth(method = lm, se = FALSE, fullrange= TRUE, color = "black") + 
+  ylab("Righting Time (seconds)") +
+  xlab("Neutral Red Retention Test Absorbance") +
+  ggtitle("B") +  # transparent bg
+  theme_classic() + # scatter plot axes theme? removes plot border
+  theme(axis.line.x = element_line(linewidth = 0.75), # x-axis thickness
+        axis.line.y = element_line(linewidth = 0.75)) + # y-axis thickness
+  theme(axis.title = element_text(size = 12, face = "bold"), # big & bold y-axis title
+        axis.title.x = element_text(margin = margin(t = 18)), # x-axis title too close to labels
+        axis.title.y = element_text(margin = margin(r = 18)), # y-axis title too close to nos.
+        axis.text = element_text(size = 12, color = "black"), # axis labels black from grey
+        panel.grid.major = element_blank(), # removes major plot grid lines
+        panel.grid.minor = element_blank(), # removes minor plot grid lines
+        plot.margin = unit(c(1, 0.5, 0.5, 0.5), "cm"), # title cut off; adjusts margin
+        plot.title = element_text(size = 28, face = "bold", vjust = 5)) # title position
+lmplot.pn
+
+ggsave("C:/Users/Xyrine/Documents/School Stuff/BS BIO 5th Year/BIO 200/R/final-paper/figures/final/lmplot_pn.png",
+       width = 8, 
+       height = 5)
+
+```
+
+### 5.b.ii. log_P. nodosus
+```{r}
+
+#  scatter plot_log transformed
+lmplot.pn.log <- ggplot(pn, aes(x = NRRT.log, y = RB.sec.log, col = Site)) + 
+  geom_point(shape = 20, size = 2) +
+    scale_color_manual(values = c("Pristine" = "#00AFBB", 
+                                  "Intermediate" = "#E7B800",
+                                  "Polluted" = "#FC4E07"), 
+                       labels = element_text(size = 10)) +
+  geom_smooth(method = lm, se = FALSE, fullrange= TRUE, color = "black") + 
+  ylab("Log (PN Righting Time, seconds)") +
+  xlab("Log (Neutral Red Retention Test Absorbance)") +
+  ggtitle("B") +  # transparent bg
+  theme_classic() + # scatter plot axes theme? removes plot border
+  theme(axis.line.x = element_line(linewidth = 0.75), # x-axis thickness
+        axis.line.y = element_line(linewidth = 0.75)) + # y-axis thickness
+  theme(axis.title = element_text(size = 14, face = "bold"), # big & bold y-axis title
+        axis.title.x = element_text(margin = margin(t = 18)), # x-axis title too close to labels
+        axis.title.y = element_text(margin = margin(r = 18)), # y-axis title too close to nos.
+        axis.text = element_text(size = 12, color = "black"), # axis labels black from grey
+        panel.grid.major = element_blank(), # removes major plot grid lines
+        panel.grid.minor = element_blank(), # removes minor plot grid lines
+        plot.margin = unit(c(1, 0.5, 0.5, 0.5), "cm"), # title cut off; adjusts margin
+        plot.title = element_text(size = 28, face = "bold", vjust = 5)) # title position
+lmplot.pn.log
+
+ggsave("C:/Users/Xyrine/Documents/School Stuff/BS BIO 5th Year/BIO 200/R/final-paper/figures/final/log_lmplot_pn.png",
+       width = 10, 
+       height = 5)
+
+```
+
+## 5.c. L. laevigata
+```{r}
+
+# linear regression 
+lm.ll <- lm(RB.sec ~ NRRT, ll)
+summary(lm.ll)
+
+# linear mixed effects
+mm.ll <- lmer(RB.sec ~ NRRT + (1|Date) + (1|Replicate) + (1|Site) + (1|Time), data = ll)
+mm.ll.log <- lmer(RB.sec.log ~ NRRT.log + (1|Date) + (1|Replicate) + (1|Site) + (1|Time), data = ll)
+
+summary(mm.ll)
+summary(mm.ll.log)
+
+## correlation coefficient
+r.squaredGLMM(mm.ll)
+r.squaredGLMM(mm.ll.log)
+
+#  scatter plot
+lmplot.ll <- ggplot(ll, aes(x = NRRT, y = RB.sec, col = Site)) + 
+  geom_point(shape = 1, size = 1) +
+    scale_color_manual(values = c("Pristine" = "#00AFBB", 
+                                  "Intermediate" = "#E7B800",
+                                  "Polluted" = "#FC4E07"), 
+                       labels = element_text(size = 10)) +
+  geom_smooth(method = lm, se = FALSE, fullrange= TRUE, color = "black") + 
+  ylab("Righting Time (seconds)") +
+  xlab("Neutral Red Retention Test Absorbance") +
+  ggtitle("C") +  # transparent bg
+  theme_classic() + # scatter plot axes theme? removes plot border
+  theme(axis.line.x = element_line(linewidth = 0.75), # x-axis thickness
+        axis.line.y = element_line(linewidth = 0.75)) + # y-axis thickness
+  theme(axis.title = element_text(size = 12, face = "bold"), # big & bold y-axis title
+        axis.title.x = element_text(margin = margin(t = 18)), # x-axis title too close to labels
+        axis.title.y = element_text(margin = margin(r = 18)), # y-axis title too close to nos.
+        axis.text = element_text(size = 12, color = "black"), # axis labels black from grey
+        panel.grid.major = element_blank(), # removes major plot grid lines
+        panel.grid.minor = element_blank(), # removes minor plot grid lines
+        plot.margin = unit(c(1, 0.5, 0.5, 0.5), "cm"), # title cut off; adjusts margin
+        plot.title = element_text(size = 28, face = "bold", vjust = 5)) # title position
+lmplot.ll
+
+ggsave("C:/Users/Xyrine/Documents/School Stuff/BS BIO 5th Year/BIO 200/R/final-paper/figures/final/lmplot_ll.png",
+       width = 8, 
+       height = 5)
+
+```
+
+
+### 5.c.ii. log_L. laevigata
+```{r}
+
+#  scatter plot_log transformed
+lmplot.ll.log <- ggplot(ll, aes(x = NRRT.log, y = RB.sec.log, col = Site)) + 
+  geom_point(shape = 20, size = 2) +
+    scale_color_manual(values = c("Pristine" = "#00AFBB", 
+                                  "Intermediate" = "#E7B800",
+                                  "Polluted" = "#FC4E07"), 
+                       labels = element_text(size = 10)) +
+  geom_smooth(method = lm, se = FALSE, fullrange= TRUE, color = "black") + 
+  ylab("Log (PN Righting Time, seconds)") +
+  xlab("Log (Neutral Red Retention Test Absorbance)") +
+  ggtitle("C") +  # transparent bg
+  theme_classic() + # scatter plot axes theme? removes plot border
+  theme(axis.line.x = element_line(linewidth = 0.75), # x-axis thickness
+        axis.line.y = element_line(linewidth = 0.75)) + # y-axis thickness
+  theme(axis.title = element_text(size = 14, face = "bold"), # big & bold y-axis title
+        axis.title.x = element_text(margin = margin(t = 18)), # x-axis title too close to labels
+        axis.title.y = element_text(margin = margin(r = 18)), # y-axis title too close to nos.
+        axis.text = element_text(size = 12, color = "black"), # axis labels black from grey
+        panel.grid.major = element_blank(), # removes major plot grid lines
+        panel.grid.minor = element_blank(), # removes minor plot grid lines
+        plot.margin = unit(c(1, 0.5, 0.5, 0.5), "cm"), # title cut off; adjusts margin
+        plot.title = element_text(size = 28, face = "bold", vjust = 5)) # title position
+lmplot.ll.log
+
+ggsave("C:/Users/Xyrine/Documents/School Stuff/BS BIO 5th Year/BIO 200/R/final-paper/figures/final/log_lmplot_ll.png",
+       width = 10, 
+       height = 5)
+
+```
+
+## 5.d.by_time_90min
+
+### 5.d.i. AT
+```{r}
+
+#  linear mixed effects model
+at.90.lm <- lmer(RB.sec ~ NRRT + (1|Date) + (1|Replicate) + (1|Site), data = at.90)
+summary(at.90.lm)
+
+#  scatter plot_log transformed
+lmplot.at.90 <- ggplot(at.90, aes(x = NRRT.log, y = RB.sec.log, col = Site)) + 
+  geom_point(shape = 20, size = 2) +
+    scale_color_manual(values = c("Pristine" = "#00AFBB", 
+                                  "Intermediate" = "#E7B800",
+                                  "Polluted" = "#FC4E07"), 
+                       labels = element_text(size = 10)) +
+  geom_smooth(method = lm, se = FALSE, fullrange= TRUE, color = "black") + 
+  ylab("Log (PN Righting Time, seconds)") +
+  xlab("Log (Neutral Red Retention Test Absorbance)") +
+  ggtitle("A") +  # transparent bg
+  theme_classic() + # scatter plot axes theme? removes plot border
+  theme(axis.line.x = element_line(linewidth = 0.75), # x-axis thickness
+        axis.line.y = element_line(linewidth = 0.75)) + # y-axis thickness
+  theme(axis.title = element_text(size = 14, face = "bold"), # big & bold y-axis title
+        axis.title.x = element_text(margin = margin(t = 18)), # x-axis title too close to labels
+        axis.title.y = element_text(margin = margin(r = 18)), # y-axis title too close to nos.
+        axis.text = element_text(size = 12, color = "black"), # axis labels black from grey
+        panel.grid.major = element_blank(), # removes major plot grid lines
+        panel.grid.minor = element_blank(), # removes minor plot grid lines
+        plot.margin = unit(c(1, 0.5, 0.5, 0.5), "cm"), # title cut off; adjusts margin
+        plot.title = element_text(size = 28, face = "bold", vjust = 5)) # title position
+lmplot.at.90
+
+ggsave("C:/Users/Xyrine/Documents/School Stuff/BS BIO 5th Year/BIO 200/R/final-paper/figures/final/90_lmplot_at.png",
+       width = 10, 
+       height = 5) 
+
+
+```
+
+
+### 5.d.ii. PN
+```{r}
+
+#  linear mixed effects model
+pn.90.lm <- lmer(RB.sec ~ NRRT + (1|Date) + (1|Replicate) + (1|Site), data = pn.90)
+summary(pn.90.lm)
+
+#  scatter plot_log transformed
+lmplot.pn.90 <- ggplot(pn.90, aes(x = NRRT.log, y = RB.sec.log, col = Site)) + 
+  geom_point(shape = 20, size = 2) +
+    scale_color_manual(values = c("Pristine" = "#00AFBB", 
+                                  "Intermediate" = "#E7B800",
+                                  "Polluted" = "#FC4E07"), 
+                       labels = element_text(size = 10)) +
+  geom_smooth(method = lm, se = FALSE, fullrange= TRUE, color = "black") + 
+  ylab("Log (PN Righting Time, seconds)") +
+  xlab("Log (Neutral Red Retention Test Absorbance)") +
+  ggtitle("B") +  # transparent bg
+  theme_classic() + # scatter plot axes theme? removes plot border
+  theme(axis.line.x = element_line(linewidth = 0.75), # x-axis thickness
+        axis.line.y = element_line(linewidth = 0.75)) + # y-axis thickness
+  theme(axis.title = element_text(size = 14, face = "bold"), # big & bold y-axis title
+        axis.title.x = element_text(margin = margin(t = 18)), # x-axis title too close to labels
+        axis.title.y = element_text(margin = margin(r = 18)), # y-axis title too close to nos.
+        axis.text = element_text(size = 12, color = "black"), # axis labels black from grey
+        panel.grid.major = element_blank(), # removes major plot grid lines
+        panel.grid.minor = element_blank(), # removes minor plot grid lines
+        plot.margin = unit(c(1, 0.5, 0.5, 0.5), "cm"), # title cut off; adjusts margin
+        plot.title = element_text(size = 28, face = "bold", vjust = 5)) # title position
+lmplot.pn.90
+
+ggsave("C:/Users/Xyrine/Documents/School Stuff/BS BIO 5th Year/BIO 200/R/final-paper/figures/final/90_lmplot_pn.png",
+       width = 10, 
+       height = 5) 
+
+
+```
+
+### 5.d.iii. LL
+```{r}
+
+#  linear mixed effects model
+ll.90.lm <- lmer(RB.sec ~ NRRT + (1|Date) + (1|Replicate) + (1|Site), data = ll.90)
+summary(ll.90.lm)
+
+#  scatter plot_log transformed
+lmplot.ll.90 <- ggplot(ll.90, aes(x = NRRT.log, y = RB.sec.log, col = Site)) + 
+  geom_point(shape = 20, size = 2) +
+    scale_color_manual(values = c("Pristine" = "#00AFBB", 
+                                  "Intermediate" = "#E7B800",
+                                  "Polluted" = "#FC4E07"), 
+                       labels = element_text(size = 10)) +
+  geom_smooth(method = lm, se = FALSE, fullrange= TRUE, color = "black") + 
+  ylab("Log (PN Righting Time, seconds)") +
+  xlab("Log (Neutral Red Retention Test Absorbance)") +
+  ggtitle("C") +  # transparent bg
+  theme_classic() + # scatter plot axes theme? removes plot border
+  theme(axis.line.x = element_line(linewidth = 0.75), # x-axis thickness
+        axis.line.y = element_line(linewidth = 0.75)) + # y-axis thickness
+  theme(axis.title = element_text(size = 14, face = "bold"), # big & bold y-axis title
+        axis.title.x = element_text(margin = margin(t = 18)), # x-axis title too close to labels
+        axis.title.y = element_text(margin = margin(r = 18)), # y-axis title too close to nos.
+        axis.text = element_text(size = 12, color = "black"), # axis labels black from grey
+        panel.grid.major = element_blank(), # removes major plot grid lines
+        panel.grid.minor = element_blank(), # removes minor plot grid lines
+        plot.margin = unit(c(1, 0.5, 0.5, 0.5), "cm"), # title cut off; adjusts margin
+        plot.title = element_text(size = 28, face = "bold", vjust = 5)) # title position
+lmplot.ll.90
+
+ggsave("C:/Users/Xyrine/Documents/School Stuff/BS BIO 5th Year/BIO 200/R/final-paper/figures/final/90_lmplot_ll.png",
+       width = 10, 
+       height = 5) 
+
+
+```
+
+# VI. GLMM
+```{r}
+
+
+#  recode factors 
+star$Species <- factor(star$Species, levels = c("Archaster typicus", 
+                                            "Protoreaster nodosus",
+                                            "Linckia laevigata"))
+star$Site <- factor(star$Site, levels = c("Intermediate","Pristine",
+                                          "Polluted"))
+star$Date <- factor(star$Date)
+
+
+## GLMM ##
+
+glmm.null <- lmer(RB.sec ~ (1|Date), REML = FALSE, data = star)
+
+summary(glmm.null)
+
+glmm.all <- glmmTMB(RB.sec ~ Species + Site + (1|Date), family = "tweedie",
+                    data = star)
+
+glmm.site <- glmmTMB(RB.sec ~ Site, family = "tweedie",
+                    data = star)
+glmm.species <- glmmTMB(RB.sec ~ Species, family = "tweedie",
+                    data = star)
+
+summary(glmm.all)
+summary(glmm.site)
+summary(glmm.species)
+
+
+
+```
