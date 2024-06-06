@@ -18,8 +18,18 @@ library(car)
 library(lme4)
 library(lmerTest)
 library(glmmTMB)
-# library(userfriendlyscience)
 library(MuMIn)
+library(emmeans)
+library(sf)
+library(ggspatial)
+library(prettymapr)
+library(rosm)
+library(raster)
+library(leaflet)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(maps)
+library(ggmap)
 
 ```
 
@@ -1574,7 +1584,8 @@ ggsave("C:/Users/Xyrine/Documents/School Stuff/BS BIO 5th Year/BIO 200/R/final-p
 
 ```
 
-# VI. GLMM
+#  VI. GLMM
+## 6.a. Models
 ```{r}
 
 
@@ -1582,28 +1593,135 @@ ggsave("C:/Users/Xyrine/Documents/School Stuff/BS BIO 5th Year/BIO 200/R/final-p
 star$Species <- factor(star$Species, levels = c("Archaster typicus", 
                                             "Protoreaster nodosus",
                                             "Linckia laevigata"))
-star$Site <- factor(star$Site, levels = c("Intermediate","Pristine",
+star$Site <- factor(star$Site, levels = c("Pristine","Intermediate",
                                           "Polluted"))
 star$Date <- factor(star$Date)
 
 
 ## GLMM ##
 
-glmm.null <- lmer(RB.sec ~ (1|Date), REML = FALSE, data = star)
+# building model 
+model.null <- glmmTMB(RB.sec ~ (1|Date), REML = FALSE, data = star)
+model.null.spp <- glmmTMB(RB.sec ~ (1|Species), REML = FALSE, data = star)
+model.null.site <- glmmTMB(RB.sec ~ (1|Site), REML = FALSE, data = star)
+model.site.rand <- glmmTMB(RB.sec ~ Site + (1|Date), family = "tweedie", data = star)
 
-summary(glmm.null)
 
-glmm.all <- glmmTMB(RB.sec ~ Species + Site + (1|Date), family = "tweedie",
+# full model
+glmm.all <- glmmTMB(RB.sec ~ Species + Site, family = "tweedie",
                     data = star)
 
-glmm.site <- glmmTMB(RB.sec ~ Site, family = "tweedie",
+# tests effect of site
+glmm.site <- glmmTMB(RB.sec ~ Site + (1|Species), family = "tweedie",
                     data = star)
+
+# tests effect of species
 glmm.species <- glmmTMB(RB.sec ~ Species, family = "tweedie",
                     data = star)
 
+
+summary(model.null)
+summary(model.null.spp)
+summary(model.null.site)
 summary(glmm.all)
-summary(glmm.site)
+summary(glmm.site) 
 summary(glmm.species)
+
+
+
+```
+
+## 6.b. Post-hoc
+```{r}
+
+##  Post-hoc through emmeans
+emmeans(glmm.site, list(pairwise ~ Site), adjust = "tukey")
+emmeans(glmm.species, list(pairwise ~ Species), adjust = "tukey")
+ph.glmm.table <- (emmeans(glmm.all, list(pairwise ~ Site + Species), adjust = "tukey"))
+
+df.glmm.table <- data.frame(ph.glmm.table$`pairwise differences of Site, Species`)
+
+```
+
+# VII. MAP
+```{r}
+
+##  map data
+map.data <- data.frame(longitude = c(124.02277777777778, 123.98138888888889,
+                                   123.56),
+                     latitude = c(11.2730556, 10.2583333,
+                                  10.2395208),
+                     site = c("Daanbantayan", "Marigondon", "Aloguinsan"))
+
+mapdata.s1 <- map.data[1,]
+mapdata.s2 <- map.data[2,]
+mapdata.s3 <- map.data[3,]
+
+##  converts map data into sf 
+sf.s1 <- st_as_sf(mapdata.s1, coords = c("longitude", "latitude"), crs = 4326)
+
+
+## generates map
+#  Daanbantayan
+maps1 <- ggplot(data = world) + 
+  annotation_map_tile() +
+  geom_point(data = mapdata.s1, mapping = aes(x = longitude, y = latitude), 
+             color = "red", shape = 20, size = 10) +
+  labs(x = "Longitude", y = "Latitude") +
+  theme(panel.border = element_rect(color = "black", fill = NA, 
+                                    linewidth = 0.5)) +
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.x = element_text(size = 10),
+        axis.text.y = element_text(size = 10)) +
+  coord_sf()
+maps1
+
+## saves png
+ggsave("C:/Users/Xyrine/Documents/School Stuff/BS BIO 5th Year/BIO 200/R/final-paper/figures/maps1.png",
+       width = 10, 
+       height = 10)
+
+#  Lapu-lapu
+maps2 <- ggplot(data = world) + 
+  annotation_map_tile() +
+  geom_point(data = mapdata.s2, mapping = aes(x = longitude, y = latitude), 
+             color = "red", shape = 20, size = 10) +
+  labs(x = "Longitude", y = "Latitude") +
+  theme(panel.border = element_rect(color = "black", fill = NA, 
+                                    linewidth = 0.5)) +
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.x = element_text(size = 10),
+        axis.text.y = element_text(size = 10)) +
+  coord_sf()
+maps2
+
+## saves png
+ggsave("C:/Users/Xyrine/Documents/School Stuff/BS BIO 5th Year/BIO 200/R/final-paper/figures/maps2.png",
+       width = 10, 
+       height = 10)
+
+#  Aloguinsan
+maps3 <- ggplot(data = world) + 
+  annotation_map_tile() +
+  geom_point(data = mapdata.s3, mapping = aes(x = longitude, y = latitude), 
+             color = "red", shape = 20, size = 10) +
+  labs(x = "Longitude", y = "Latitude") +
+  theme(panel.border = element_rect(color = "black", fill = NA, 
+                                    linewidth = 0.5)) +
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.x = element_text(size = 10),
+        axis.text.y = element_text(size = 10)) +
+  coord_sf()
+maps3
+
+## saves png
+ggsave("C:/Users/Xyrine/Documents/School Stuff/BS BIO 5th Year/BIO 200/R/final-paper/figures/maps3.png",
+       width = 10, 
+       height = 10)
+
 
 
 
