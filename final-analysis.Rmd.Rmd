@@ -46,10 +46,10 @@ head(data, 10)
 ```{r}
 
 star <- data %>%
-  select(Site, Species, RB, Abs15.R1, Abs15.R2, Abs15.R3,
+  dplyr::select(ID, Site, Species, RB, Abs15.R1, Abs15.R2, Abs15.R3,
          Abs30.R1, Abs30.R2, Abs30.R3,
          Abs60.R1, Abs60.R2, Abs60.R3,
-         Abs90.R1, Abs90.R2, Abs90.R3, Date) %>%
+         Abs90.R1, Abs90.R2, Abs90.R3, Date, Location) %>%
   gather(Rep, NRRT, Abs15.R1, Abs15.R2, Abs15.R3,
          Abs30.R1, Abs30.R2, Abs30.R3,
          Abs60.R1, Abs60.R2, Abs60.R3,
@@ -61,7 +61,7 @@ star <- data %>%
          Time = gsub("Abs90", "90", Time)) %>%
   mutate(RB.sec = sapply(as.character(RB), rb.time)) %>%  #  see functions.R
   relocate(RB.sec, .after = RB) %>%    #  moves col RB.sec from last to after RB
-  relocate(Date, .before = Site)
+  relocate(Date, .before = Site) 
 
 ##  replaces all empty NRRT abs values (0.000) with NA
 star$NRRT[star$NRRT == 0.000] <- NA
@@ -74,7 +74,7 @@ star <- star %>%
 
 ##  conversions
 star$Time <- as.character(star$Time)
-star$Date <- as.Date(star$Date, "%m/%d/%Y")
+
 
 
 # testing function rb.time; ignore
@@ -1585,7 +1585,7 @@ ggsave("C:/Users/Xyrine/Documents/School Stuff/BS BIO 5th Year/BIO 200/R/final-p
 ```
 
 #  VI. GLMM
-## 6.a. Models
+## 6.a. Building model
 ```{r}
 
 
@@ -1627,6 +1627,130 @@ summary(glmm.all)
 summary(glmm.site) 
 summary(glmm.species)
 
+```
+
+### 6.a.i model_RB between sites across species
+```{r}
+
+## converts to factor
+star$Date.Num <- factor(star$Date, levels = c("03/20/2024","03/12/2024", "03/17/2024"),
+                    labels = c("One", "Two", "Three"))
+star$ID <- factor(star$ID)
+star$Location <- factor(star$Location)
+
+#### trial ####
+
+id1 <-glmmTMB(RB.sec ~ Site + (1|Date.Num) + (1|Species) + (1|ID), 
+            family="tweedie",data = star)
+
+id2 <- glmmTMB(RB.sec ~ Site + (1|Species) + (1|ID), 
+            family="tweedie",data = star)
+
+id3 <- glmmTMB(RB.sec ~ Site + (1|ID), 
+            family="tweedie",data = pn)
+
+id4 <- glmmTMB(RB.sec ~ 1 + (1|ID), 
+            family="tweedie",data = pn)
+
+#### models ####
+
+##  RB between sites across species
+ss1 <-glmmTMB(RB.sec ~ Site + (1|Location) + (1|Species), 
+            family="tweedie",data = star)
+
+ss0 <-glmmTMB(RB.sec ~ 1 + (1|Location) + (1|Species), 
+            family="tweedie", data = star)
+
+
+##  comparing models
+anova(ss1,ss0)
+
+#### post-hoc ####
+emmeans(ss1, list(pairwise ~ Site), adjust = "tukey")
+
+```
+
+### 6.a.ii. model_RB between sites per species
+```{r}
+##  RB between sites per species
+sps.with <-glmmTMB(RB.sec ~ Site + (1|Location), family="tweedie",data = star)
+
+sps.none <-glmmTMB(RB.sec ~ 1 + (1|Location), family="tweedie", data = star)
+
+
+```
+
+#### 6.a.ii_AT
+```{r}
+
+## converts to factor
+at$Species <- factor(at$Species)
+at$Site <- factor(at$Site)
+
+at$Date.Num <- factor(at$Date, levels = c("03/20/2024","03/12/2024", "03/17/2024"),
+                    labels = c("One", "Two", "Three"))
+
+#### model ####
+at1 <-glmmTMB(RB.sec ~ Site + (1|Location), data = at)
+
+at0 <-glmmTMB(RB.sec ~ 1 + (1|Location), data = at)
+
+##  compare models 
+anova(at1,at0)
+
+
+#### post-hoc ####
+emmeans(at1, list(pairwise ~ Site), adjust = "tukey")
+
+
+```
+
+#### 6.a.ii_PN
+```{r}
+
+## converts to factor
+pn$Species <- factor(pn$Species)
+pn$Site <- factor(pn$Site)
+pn$Location <- factor(pn$Location)
+
+pn$Date.Num <- factor(pn$Date, levels = c("03/20/2024","03/12/2024", "03/17/2024"),
+                    labels = c("One", "Two", "Three"))
+
+#### model ####
+pn1 <-glmmTMB(RB.sec ~ Site + (1|Location), data = pn)
+
+pn0 <-glmmTMB(RB.sec ~ 1 + (1|Location), data = pn)
+
+##  compare models 
+anova(pn1, pn0)
+
+#### post-hoc ####
+emmeans(pn1, list(pairwise ~ Site), adjust = "tukey")
+
+
+```
+
+#### 6.a.ii_LL
+```{r}
+
+## converts to factor
+ll$Species <- factor(ll$Species)
+ll$Site <- factor(ll$Site)
+ll$Location <- factor(ll$Location)
+
+ll$Date.Num <- factor(ll$Date, levels = c("03/20/2024","03/12/2024", "03/17/2024"),
+                    labels = c("One", "Two", "Three"))
+
+#### model ####
+ll1 <-glmmTMB(RB.sec ~ Site + (1|Location), data = ll)
+
+ll0 <-glmmTMB(RB.sec ~ 1 + (1|Location), data = ll)
+
+##  compare models 
+anova(ll1,ll0)
+
+#### post-hoc ####
+emmeans(ll1, list(pairwise ~ Site), adjust = "tukey")
 
 
 ```
@@ -1672,8 +1796,8 @@ maps1 <- ggplot(data = world) +
                                     linewidth = 0.5)) +
   theme(axis.title.x = element_blank(),
         axis.title.y = element_blank(),
-        axis.text.x = element_text(size = 10),
-        axis.text.y = element_text(size = 10)) +
+        axis.text.x = element_text(size = 20),
+        axis.text.y = element_text(size = 20)) +
   coord_sf()
 maps1
 
@@ -1692,8 +1816,8 @@ maps2 <- ggplot(data = world) +
                                     linewidth = 0.5)) +
   theme(axis.title.x = element_blank(),
         axis.title.y = element_blank(),
-        axis.text.x = element_text(size = 10),
-        axis.text.y = element_text(size = 10)) +
+        axis.text.x = element_text(size = 20),
+        axis.text.y = element_text(size = 20)) +
   coord_sf()
 maps2
 
@@ -1712,8 +1836,8 @@ maps3 <- ggplot(data = world) +
                                     linewidth = 0.5)) +
   theme(axis.title.x = element_blank(),
         axis.title.y = element_blank(),
-        axis.text.x = element_text(size = 10),
-        axis.text.y = element_text(size = 10)) +
+        axis.text.x = element_text(size = 20),
+        axis.text.y = element_text(size = 20)) +
   coord_sf()
 maps3
 
